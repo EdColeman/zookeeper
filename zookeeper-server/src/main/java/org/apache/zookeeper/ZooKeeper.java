@@ -3073,9 +3073,27 @@ public class ZooKeeper implements AutoCloseable {
      *             if ACL list is not valid
      */
     private void validateACL(List<ACL> acl) throws KeeperException.InvalidACLException {
-        if (acl == null || acl.isEmpty() || acl.contains(null)) {
+        if (acl == null || acl.isEmpty() || hasNull(acl)) {
             throw new KeeperException.InvalidACLException();
         }
+    }
+
+    /**
+     * Test if a collection contains a null entry. This method avoids collection.contains(null) which
+     * will throw an NPE when querying an ImmutableCollection for null using methods contains,
+     * indexOf, lastIndexOf (JDK-8265905)
+     *
+     * @param acl ACL list
+     *
+     * @return true if the ACL list contains a null (invalid), false otherwise (valid).
+     */
+    private boolean hasNull(List<ACL> acl) {
+        for (ACL a : acl) {
+            if (a == null) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

@@ -19,13 +19,19 @@
 package org.apache.zookeeper.test;
 
 import static org.apache.zookeeper.test.ClientBase.CONNECTION_TIMEOUT;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 import java.io.File;
+import java.util.AbstractList;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException.InvalidACLException;
 import org.apache.zookeeper.PortAssignment;
@@ -33,6 +39,7 @@ import org.apache.zookeeper.WatchedEvent;
 import org.apache.zookeeper.Watcher;
 import org.apache.zookeeper.Watcher.Event.KeeperState;
 import org.apache.zookeeper.ZKTestCase;
+import org.apache.zookeeper.ZooDefs;
 import org.apache.zookeeper.ZooDefs.Ids;
 import org.apache.zookeeper.ZooKeeper;
 import org.apache.zookeeper.data.ACL;
@@ -301,5 +308,82 @@ public class ACLTest extends ZKTestCase implements Watcher {
             assertTrue(ClientBase.waitForServerDown(HOSTPORT, ClientBase.CONNECTION_TIMEOUT), "waiting for server down");
         }
     }
+    @Test
+    public void testImmutableACL() throws Exception {
+        File tmpDir = ClientBase.createTmpDir();
+        ClientBase.setupTestEnv();
+        ZooKeeperServer zks = new ZooKeeperServer(tmpDir, tmpDir, 3000);
+        final int PORT = Integer.parseInt(HOSTPORT.split(":")[1]);
+        ServerCnxnFactory f = ServerCnxnFactory.createFactory(PORT, -1);
+        f.startup(zks);
+        ZooKeeper zk = ClientBase.createZKClient(HOSTPORT);
+        try {
 
+            List<ACL> tempAcls = new ArrayList<>(Ids.OPEN_ACL_UNSAFE);
+            tempAcls.add(new ACL(ZooDefs.Perms.READ, ZooDefs.Ids.ANYONE_ID_UNSAFE));
+
+            // case 1 : accept unmodifiableList
+            List<ACL> acls = Collections.unmodifiableList(tempAcls);
+                String p = zk.create("/foo", "foo".getBytes(), acls, CreateMode.PERSISTENT);
+                assertEquals("/foo", p);
+
+            // case 2 : accept immutable list
+
+            // replace DummyImmutable with List.copyOf(tempAcls) for java 9+
+            List<ACL> immutableAcl = new DummyImmutable<>(tempAcls);
+            String p2 = zk.create("/bar", "bar".getBytes(), immutableAcl, CreateMode.PERSISTENT);
+            assertEquals("/bar", p2);
+
+        } finally {
+            zk.close();
+            f.shutdown();
+            zks.shutdown();
+            assertTrue(ClientBase.waitForServerDown(HOSTPORT, ClientBase.CONNECTION_TIMEOUT), "waiting for server down");
+        }
+    }
+
+    /**
+     *  validate DummyImmutable replicates NPE on contains(null) call
+     */
+    @Test public void testImmutableSim(){
+        List<ACL> immutableAcl = new DummyImmutable<>(new ArrayList<>(Ids.OPEN_ACL_UNSAFE));
+        assertThrows(NullPointerException.class, ()-> immutableAcl.contains((Object)null));
+    }
+    /**
+     * This class simulates calling contain(null) throws an NPE for an immutable collection created with
+     * List.copy, List.copyOf... (java 9+) and is used to test that modifications to
+     * {@code ZooKeeper.validateACL(List<ACL> acl)} pass with an immutable collection.
+     * <p>
+     *     After java 9+ is adopted, this class can be replaced using List methods that return an immutable collection in testImmutableACL()
+     * @param <T> a list of T's
+     */
+    private static class DummyImmutable<T> extends AbstractList<T> {
+
+        private final List<T> list;
+        public DummyImmutable(final List<T> source){
+            list = new ArrayList<>(source);
+        }
+
+        @Override
+        public T get(int index) {
+            return list.get(index);
+        }
+
+        @Override
+        public Iterator<T> iterator() {
+            return list.iterator();
+        }
+
+        @Override
+        public int size() {
+            return list.size();
+        }
+        @Override
+        public boolean contains(Object other){
+            if(other == null){
+                throw new NullPointerException("cannot test immutable for null with contains");
+            }
+            return list.contains(other);
+        }
+    }
 }
