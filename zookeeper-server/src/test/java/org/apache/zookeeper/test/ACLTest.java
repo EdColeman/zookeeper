@@ -31,7 +31,6 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
-
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException.InvalidACLException;
 import org.apache.zookeeper.PortAssignment;
@@ -347,7 +346,7 @@ public class ACLTest extends ZKTestCase implements Watcher {
      */
     @Test public void testImmutableSim(){
         List<ACL> immutableAcl = new DummyImmutable<>(new ArrayList<>(Ids.OPEN_ACL_UNSAFE));
-        assertThrows(NullPointerException.class, ()-> immutableAcl.contains((Object)null));
+        assertThrows(NullPointerException.class, ()-> immutableAcl.contains((Object) null));
     }
     /**
      * This class simulates calling contain(null) throws an NPE for an immutable collection created with
@@ -380,7 +379,7 @@ public class ACLTest extends ZKTestCase implements Watcher {
         }
         @Override
         public boolean contains(Object other){
-            if(other == null){
+            if (other == null){
                 throw new NullPointerException("cannot test immutable for null with contains");
             }
             return list.contains(other);
